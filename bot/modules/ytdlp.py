@@ -7,7 +7,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler
 
 from bot import (CATEGORY_NAMES, DATABASE_URL, DOWNLOAD_DIR, IS_USER_SESSION,
                  btn_listener, config_dict, dispatcher, user_data)
-from bot.helper.ext_utils.bot_utils import (check_user_tasks,
+from bot.helper.ext_utils.bot_utils import (check_buttons, check_user_tasks,
                                             get_category_btns,
                                             get_readable_file_size, is_url,
                                             new_thread)
@@ -17,19 +17,19 @@ from bot.helper.mirror_utils.download_utils.yt_dlp_download_helper import Youtub
 from bot.helper.telegram_helper.bot_commands import BotCommands
 from bot.helper.telegram_helper.button_build import ButtonMaker
 from bot.helper.telegram_helper.filters import CustomFilters
-from bot.helper.telegram_helper.message_utils import (chat_restrict,
+from bot.helper.telegram_helper.message_utils import (anno_checker,
+                                                      chat_restrict,
                                                       delete_links,
                                                       editMessage, forcesub,
-                                                      message_filter,
+                                                      isAdmin, message_filter,
                                                       sendDmMessage,
-                                                      sendMarkup, sendMessage)
+                                                      sendLogMessage,
+                                                      sendMessage)
 from bot.modules.listener import MirrorLeechListener
 
 listener_dict = {}
 
 def _ytdl(bot, message, isZip=False, isLeech=False):
-    if len(btn_listener) > 2:
-        return sendMessage("Sorry, I can only handle 3 tasks at a time.", bot, message)
     mssg = message.text
     msg_id = message.message_id
     qual = ''
@@ -38,11 +38,14 @@ def _ytdl(bot, message, isZip=False, isLeech=False):
     index = 1
     link = ''
     c_index = 0
+    raw_url = None
     args = mssg.split(maxsplit=2)
     if len(args) > 1:
         for x in args:
             x = x.strip()
-            if x == 's':
+            if x in ['|', 'pswd:', 'opt:']:
+                break
+            elif x == 's':
                select = True
                index += 1
             elif x.strip().isdigit():
@@ -56,7 +59,7 @@ def _ytdl(bot, message, isZip=False, isLeech=False):
                     link = ''
                 else:
                     link = split(r"opt:|pswd:|\|", link)[0]
-                    link = link.strip() 
+                    link = link.strip()
 
     name = mssg.split('|', maxsplit=1)
     if len(name) > 1:
@@ -116,28 +119,34 @@ You can always add video quality from yt-dlp api options.
 Check all yt-dlp api options from this <a href='https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/YoutubeDL.py#L178'>FILE</a>.
         """
         return sendMessage(help_msg.format_map({'cmd': BotCommands.YtdlCommand[0], 'fmg': '{"ffmpeg": ["-threads", "4"]}'}), bot, message)
-    if message_filter(bot, message, tag):
-        return
-    if DATABASE_URL and config_dict['STOP_DUPLICATE_TASKS']:
-        raw_url = extract_link(link)
-        exist = DbManger().check_download(raw_url)
-        if exist:
-            _msg = f'<b>Download is already added by {exist["tag"]}</b>\n\nCheck the download status in @{exist["botname"]}\n\n<b>Link</b>: <code>{exist["_id"]}</code>'
-            delete_links(bot, message)
-            return sendMessage(_msg, bot, message)
-    if forcesub(bot, message, tag):
-        return
-    maxtask = config_dict['USER_MAX_TASKS']
-    if maxtask and not CustomFilters.owner_query(message.from_user.id) and check_user_tasks(message.from_user.id, maxtask):
-        return sendMessage(f"Tasks limit exceeded for {maxtask} tasks", bot, message)
-    listener = [bot, message, isZip, isLeech, pswd, tag, link]
+    if message.from_user.id in [1087968824, 136817688]:
+        message.from_user.id = anno_checker(message)
+        if not message.from_user.id:
+            return
+    if not isAdmin(message):
+        if message_filter(bot, message, tag):
+            return
+        if DATABASE_URL and config_dict['STOP_DUPLICATE_TASKS']:
+            raw_url = extract_link(link)
+            exist = DbManger().check_download(raw_url)
+            if exist:
+                _msg = f'<b>Download is already added by {exist["tag"]}</b>\n\nCheck the download status in @{exist["botname"]}\n\n<b>Link</b>: <code>{exist["_id"]}</code>'
+                delete_links(bot, message)
+                return sendMessage(_msg, bot, message)
+        if forcesub(bot, message, tag):
+            return
+        if (maxtask:= config_dict['USER_MAX_TASKS']) and check_user_tasks(message.from_user.id, maxtask):
+            return sendMessage(f"Your tasks limit exceeded for {maxtask} tasks", bot, message)
+    listener = [bot, message, isZip, isLeech, pswd, tag, link, raw_url]
     extra = [name, opt, qual, select, c_index, time()]
     if len(CATEGORY_NAMES) > 1 and not isLeech:
+        if checked:= check_buttons():
+            return sendMessage(checked, bot, message)
         time_out = 30
         btn_listener[msg_id] = [extra, listener, time_out]
         chat_restrict(message)
         text, btns = get_category_btns('ytdlp', time_out, msg_id, c_index)
-        engine = sendMarkup(text, bot, message, btns)
+        engine = sendMessage(text, bot, message, btns)
         _auto_start_dl(engine, msg_id, time_out)
     else:
         chat_restrict(message)
@@ -186,10 +195,9 @@ def select_format(update, context):
     msg = query.message
     data = data.split(" ")
     task_id = int(data[1])
-    try:
-        task_info = listener_dict[task_id]
-    except:
+    if task_id not in listener_dict:
         return editMessage("This is an old task", msg)
+    task_info = listener_dict[task_id]
     uid = task_info[1]
     if user_id != uid and not CustomFilters.owner_query(user_id):
         return query.answer(text="This task is not for you!", show_alert=True)
@@ -248,11 +256,10 @@ def _mdisk(link, name):
 
 def _auto_cancel(msg, task_id):
     sleep(120)
-    try:
-        del listener_dict[task_id]
-        editMessage('Timed out! Task has been cancelled.', msg)
-    except:
-        pass
+    if task_id not in listener_dict:
+        return
+    del listener_dict[task_id]
+    editMessage('Timed out! Task has been cancelled.', msg)
 
 def start_ytdlp(extra, ytdlp_listener):
     bot = ytdlp_listener[0]
@@ -262,6 +269,7 @@ def start_ytdlp(extra, ytdlp_listener):
     pswd = ytdlp_listener[4]
     tag = ytdlp_listener[5]
     link = ytdlp_listener[6]
+    raw_url = ytdlp_listener[7]
     name = extra[0]
     opt = extra[1]
     qual = extra[2]
@@ -275,12 +283,15 @@ def start_ytdlp(extra, ytdlp_listener):
     if config_dict['ENABLE_DM'] and message.chat.type != 'private':
         if isLeech and IS_USER_SESSION and not config_dict['DUMP_CHAT']:
             return sendMessage('ENABLE_DM and User Session need DUMP_CHAT', bot, message)
-        dmMessage = sendDmMessage(link, bot, message, disable_notification=True)
+        dmMessage = sendDmMessage(link, bot, message)
         if not dmMessage:
             return
     else:
         dmMessage = None
-    listener = MirrorLeechListener(bot, message, isZip, isLeech=isLeech, pswd=pswd, tag=tag, raw_url=link, c_index=c_index, dmMessage=dmMessage)
+    logMessage = None if isLeech else sendLogMessage(link, bot, message)
+    listener = MirrorLeechListener(bot, message, isZip, isLeech=isLeech, pswd=pswd,
+                                tag=tag, raw_url=raw_url, c_index=c_index,
+                                dmMessage=dmMessage, logMessage=logMessage)
     listener.mode = 'Leech' if isLeech else f'Drive {CATEGORY_NAMES[c_index]}'
     if isZip:
         listener.mode += ' as Zip'
@@ -328,7 +339,7 @@ def start_ytdlp(extra, ytdlp_listener):
             buttons.sbutton("Cancel", f"qu {msg_id} cancel")
             YTBUTTONS = buttons.build_menu(3)
             listener_dict[msg_id] = [listener, user_id, link, name, YTBUTTONS, opt, formats_dict]
-            bmsg = sendMarkup('Choose Playlist Videos Quality:', bot, message, YTBUTTONS)
+            bmsg = sendMessage('Choose Playlist Videos Quality:', bot, message, YTBUTTONS)
         else:
             formats = result.get('formats')
             if formats is not None:
@@ -378,21 +389,19 @@ def start_ytdlp(extra, ytdlp_listener):
             buttons.sbutton("Cancel", f"qu {msg_id} cancel")
             YTBUTTONS = buttons.build_menu(2)
             listener_dict[msg_id] = [listener, user_id, link, name, YTBUTTONS, opt, formats_dict]
-            bmsg = sendMarkup('Choose Video quality\n\n<i>This Will Cancel Automatically in <u>2 Minutes</u></i>', bot, message, YTBUTTONS)
+            bmsg = sendMessage('Choose Video quality\n\n<i>This Will Cancel Automatically in <u>2 Minutes</u></i>', bot, message, YTBUTTONS)
 
         Thread(target=_auto_cancel, args=(bmsg, msg_id)).start()
-    delete_links(bot, message)
 
 @new_thread
 def _auto_start_dl(msg, msg_id, time_out):
     sleep(time_out)
-    try:
-        info = btn_listener[msg_id]
-        editMessage("Timed out! Task has been started.", msg)
-        start_ytdlp(info[0], info[1])
-        del btn_listener[msg_id]
-    except:
-        pass
+    if msg_id not in btn_listener:
+        return
+    info = btn_listener[msg_id]
+    del btn_listener[msg_id]
+    start_ytdlp(info[0], info[1])
+    editMessage("Timed out! Task has been started.", msg)
 
 @new_thread
 def ytdl_confirm(update, context):
@@ -402,10 +411,9 @@ def ytdl_confirm(update, context):
     data = query.data
     data = data.split()
     msg_id = int(data[2])
-    try:
-        listnerInfo = btn_listener[msg_id]
-    except KeyError:
+    if msg_id not in btn_listener:
         return editMessage('<b>Download has been cancelled or started already</b>', message)
+    listnerInfo = btn_listener[msg_id]
     extra = listnerInfo[0]
     listener = listnerInfo[1]
     if user_id != listener[1].from_user.id and not CustomFilters.owner_query(user_id):
@@ -443,15 +451,15 @@ def ytdlZipleech(update, context):
 
 
 ytdl_handler = CommandHandler(BotCommands.YtdlCommand, ytdl,
-                              filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                              filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 ytdl_zip_handler = CommandHandler(BotCommands.YtdlZipCommand, ytdlZip,
-                              filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                              filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 ytdl_leech_handler = CommandHandler(BotCommands.YtdlLeechCommand, ytdlleech,
-                              filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                              filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 ytdl_zip_leech_handler = CommandHandler(BotCommands.YtdlZipLeechCommand, ytdlZipleech,
-                              filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
-quality_handler = CallbackQueryHandler(select_format, pattern="qu", run_async=True)
-ytdl_confirm_handler = CallbackQueryHandler(ytdl_confirm, pattern="ytdlp", run_async=True)
+                              filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
+quality_handler = CallbackQueryHandler(select_format, pattern="qu")
+ytdl_confirm_handler = CallbackQueryHandler(ytdl_confirm, pattern="ytdlp")
 dispatcher.add_handler(ytdl_handler)
 dispatcher.add_handler(ytdl_zip_handler)
 dispatcher.add_handler(ytdl_leech_handler)

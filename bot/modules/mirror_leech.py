@@ -10,7 +10,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler
 
 from bot import (CATEGORY_NAMES, DATABASE_URL, DOWNLOAD_DIR, IS_USER_SESSION,
                  LOGGER, btn_listener, config_dict, dispatcher)
-from bot.helper.ext_utils.bot_utils import (check_user_tasks,
+from bot.helper.ext_utils.bot_utils import (check_buttons, check_user_tasks,
                                             get_category_btns,
                                             get_content_type, is_gdrive_link,
                                             is_magnet, is_mega_link, is_url,
@@ -23,21 +23,20 @@ from bot.helper.mirror_utils.download_utils.direct_link_generator import direct_
 from bot.helper.mirror_utils.download_utils.gd_downloader import add_gd_download
 from bot.helper.mirror_utils.download_utils.mega_downloader import add_mega_download
 from bot.helper.mirror_utils.download_utils.qbit_downloader import add_qb_torrent
-from bot.helper.mirror_utils.download_utils.telegram_downloader import TelegramDownloadHelper
+from bot.helper.mirror_utils.download_utils.telegram_downloader import  TelegramDownloadHelper
 from bot.helper.telegram_helper.bot_commands import BotCommands
 from bot.helper.telegram_helper.filters import CustomFilters
-from bot.helper.telegram_helper.message_utils import (chat_restrict,
-                                                      delete_links,
+from bot.helper.telegram_helper.message_utils import (anno_checker, chat_restrict,
+                                                      delete_links, isAdmin,
                                                       editMessage, forcesub,
                                                       message_filter,
                                                       sendDmMessage,
-                                                      sendMarkup, sendMessage)
+                                                      sendLogMessage,
+                                                      sendMessage)
 from bot.modules.listener import MirrorLeechListener
 
 
 def _mirror_leech(bot, message, isZip=False, extract=False, isQbit=False, isLeech=False):
-    if len(btn_listener) > 2:
-        return sendMessage("Sorry, I can only handle 2 tasks at a time.", bot, message)
     msg_id = message.message_id
     mesg = message.text.split('\n')
     message_args = mesg[0].split(maxsplit=1)
@@ -57,7 +56,9 @@ def _mirror_leech(bot, message, isZip=False, extract=False, isQbit=False, isLeec
         args = mesg[0].split(maxsplit=3)
         for x in args:
             x = x.strip()
-            if x == 's':
+            if x in ['|', 'pswd:']:
+                break
+            elif x == 's':
                select = True
                index += 1
             elif x == 'd':
@@ -109,8 +110,6 @@ def _mirror_leech(bot, message, isZip=False, extract=False, isQbit=False, isLeec
                 tag = f"@{reply_to.from_user.username}"
             else:
                 tag = reply_to.from_user.mention_html(reply_to.from_user.first_name)
-        if message_filter(bot, message, tag):
-            return
         if len(link) == 0 or not is_url(link) and not is_magnet(link):
             if file_ is None:
                 reply_text = reply_to.text.split(maxsplit=1)[0].strip()
@@ -119,25 +118,34 @@ def _mirror_leech(bot, message, isZip=False, extract=False, isQbit=False, isLeec
             elif isinstance(file_, list):
                 link = file_[-1].get_file().file_path
             elif not isQbit and file_.mime_type != "application/x-bittorrent":
-                if DATABASE_URL and config_dict['STOP_DUPLICATE_TASKS']:
-                    raw_url = file_.file_unique_id
-                    exist = DbManger().check_download(raw_url)
-                    if exist:
-                        _msg = f'<b>Download is already added by {exist["tag"]}</b>\n\nCheck the download status in @{exist["botname"]}\n\n<b>Link</b>: <code>{exist["_id"]}</code>'
-                        delete_links(bot, message)
-                        return sendMessage(_msg, bot, message)
-                if forcesub(bot, message, tag):
-                    return
-                if maxtask and not CustomFilters.owner_query(message.from_user.id) and check_user_tasks(message.from_user.id, maxtask):
-                    return sendMessage(f"Tasks limit exceeded for {maxtask} tasks", bot, message)
+                if message.from_user.id in [1087968824, 136817688]:
+                    message.from_user.id = anno_checker(message)
+                    if not message.from_user.id:
+                        return
+                if not isAdmin(message):
+                    if message_filter(bot, message, tag):
+                        return
+                    if DATABASE_URL and config_dict['STOP_DUPLICATE_TASKS']:
+                        raw_url = file_.file_unique_id
+                        exist = DbManger().check_download(raw_url)
+                        if exist:
+                            _msg = f'<b>Download is already added by {exist["tag"]}</b>\n\nCheck the download status in @{exist["botname"]}\n\n<b>Link</b>: <code>{exist["_id"]}</code>'
+                            delete_links(bot, message)
+                            return sendMessage(_msg, bot, message)
+                    if forcesub(bot, message, tag):
+                        return
+                    if (maxtask:= config_dict['USER_MAX_TASKS']) and check_user_tasks(message.from_user.id, maxtask):
+                        return sendMessage(f"Your tasks limit exceeded for {maxtask} tasks", bot, message)
                 link = 'telegram_file'
                 listener = [bot, message, isZip, extract, isQbit, isLeech, pswd, tag, select, seed, raw_url]
                 extras = [link, name, ratio, seed_time, c_index, time()]
                 if len(CATEGORY_NAMES) > 1 and not isLeech:
+                    if checked:= check_buttons():
+                        return sendMessage(checked, bot, message)
                     btn_listener[msg_id] = [listener, extras, time_out]
                     chat_restrict(message)
                     text, btns = get_category_btns('mir', time_out, msg_id, c_index)
-                    engine = sendMarkup(text, bot, message, btns)
+                    engine = sendMessage(text, bot, message, btns)
                     _auto_start_dl(engine, msg_id, time_out)
                 else:
                     chat_restrict(message)
@@ -169,45 +177,51 @@ def _mirror_leech(bot, message, isZip=False, extract=False, isQbit=False, isLeec
 
 <b>Bittorrent selection:</b>
 <code>/{cmd}</code> <b>s</b> link or by replying to file/link
-This perfix should be always before |newname or pswd:
+This option should be always before |newname or pswd:
 
 <b>Bittorrent seed</b>:
 <code>/{cmd}</code> <b>d</b> link or by replying to file/link
 To specify ratio and seed time add d:ratio:time. Ex: d:0.7:10 (ratio and time) or d:0.7 (only ratio) or d::10 (only time) where time in minutes.
-This perfix should be always before |newname or pswd:
+This options  should be always before |newname or pswd:
 
 <b>Multi links only by replying to first link/file:</b>
 <code>/{cmd}</code> 10(number of links/files)
 Number should be always before |newname or pswd:
 
 <b>NOTES:</b>
-1. When use cmd by reply don't add any perfix in link msg! always add them after cmd msg!
-2. You can't add this perfixes <b>|newname, pswd: and authorization</b> randomly. They should be arranged like exmaple above, rename then pswd then authorization. If you don't want to add pswd for example then it will be (|newname authorization), just don't change the arrangement.
-3. You can add this perfixes <b>d, s and multi</b> randomly. Ex: <code>/{cmd}</code> d:1:20 s 10 <b>or</b> <code>/{cmd}</code> s 10 d:0.5:100
+1. When use cmd by reply don't add any option in link msg! always add them after cmd msg!
+2. You can't add this those options <b>|newname, pswd: and authorization</b> randomly. They should be arranged like exmaple above, rename then pswd. Those options should be after the link if link along with the cmd and after any other option
+3. You can add this those options <b>d, s and multi</b> randomly. Ex: <code>/{cmd}</code> d:1:20 s 10 <b>or</b> <code>/{cmd}</code> s 10 d:0.5:100
 4. Commands that start with <b>qb</b> are ONLY for torrents.
 '''
-        delete_links(bot, message)
         return sendMessage(help_msg.format_map({'cmd': BotCommands.MirrorCommand[0]}), bot, message)
-    if message_filter(bot, message, tag):
-        return
-    if DATABASE_URL and config_dict['STOP_DUPLICATE_TASKS']:
-        raw_url = extract_link(link, tfile)
-        exist = DbManger().check_download(raw_url)
-        if exist:
-            _msg = f'<b>Download is already added by {exist["tag"]}</b>\n\nCheck the download status in @{exist["botname"]}\n\n<b>Link</b>: <code>{exist["_id"]}</code>'
-            delete_links(bot, message)
-            return sendMessage(_msg, bot, message)
-    if forcesub(bot, message, tag):
-        return
-    if maxtask and not CustomFilters.owner_query(message.from_user.id) and check_user_tasks(message.from_user.id, maxtask):
-        return sendMessage(f"Tasks limit exceeded for {maxtask} tasks", bot, message)
+    if message.from_user.id in [1087968824, 136817688]:
+        message.from_user.id = anno_checker(message)
+        if not message.from_user.id:
+            return
+    if not isAdmin(message):
+        if message_filter(bot, message, tag):
+            return
+        if DATABASE_URL and config_dict['STOP_DUPLICATE_TASKS']:
+            raw_url = extract_link(link, tfile)
+            exist = DbManger().check_download(raw_url)
+            if exist:
+                _msg = f'<b>Download is already added by {exist["tag"]}</b>\n\nCheck the download status in @{exist["botname"]}\n\n<b>Link</b>: <code>{exist["_id"]}</code>'
+                delete_links(bot, message)
+                return sendMessage(_msg, bot, message)
+        if forcesub(bot, message, tag):
+            return
+        if (maxtask:= config_dict['USER_MAX_TASKS']) and check_user_tasks(message.from_user.id, maxtask):
+            return sendMessage(f"Your tasks limit exceeded for {maxtask} tasks", bot, message)
     listener = [bot, message, isZip, extract, isQbit, isLeech, pswd, tag, select, seed, raw_url]
     extras = [link, name, ratio, seed_time, c_index, time()]
     if len(CATEGORY_NAMES) > 1 and not isLeech :
+        if checked:= check_buttons():
+            return sendMessage(checked, bot, message)
         btn_listener[msg_id] = [listener, extras, time_out]
         text, btns = get_category_btns('mir', time_out, msg_id, c_index)
         chat_restrict(message)
-        engine = sendMarkup(text, bot, message, btns)
+        engine = sendMessage(text, bot, message, btns)
         _auto_start_dl(engine, msg_id, time_out)
     else:
         chat_restrict(message)
@@ -225,13 +239,12 @@ Number should be always before |newname or pswd:
 @new_thread
 def _auto_start_dl(msg, msg_id, time_out):
     sleep(time_out)
-    try:
-        info = btn_listener[msg_id]
-        del btn_listener[msg_id]
-        editMessage("Timed out! Task has been started.", msg)
-        start_mirror_leech(info[1], info[0])
-    except:
-        pass
+    if msg_id not in btn_listener:
+        return
+    info = btn_listener[msg_id]
+    del btn_listener[msg_id]
+    start_mirror_leech(info[1], info[0])
+    editMessage("Timed out! Task has been started.", msg)
 
 def start_mirror_leech(extra, s_listener):
     bot = s_listener[0]
@@ -255,22 +268,21 @@ def start_mirror_leech(extra, s_listener):
         return sendMessage('Locked!', bot, message)
     if not isZip and not extract and not isLeech and is_gdrive_link(link):
         gmsg = f"Use /{BotCommands.CloneCommand} to clone Google Drive file/folder\n\n"
-        gmsg += "Use Zip mode to make zip of Google Drive folder\n\n"
-        gmsg += "Use Unzip mode to extracts Google Drive archive folder/file\n\n"
-        gmsg += "Use Telegram mode to upload on telegram"
-        delete_links(bot, message)
+        gmsg += f"Use /{BotCommands.ZipMirrorCommand} to make zip of Google Drive folder\n\n"
+        gmsg += f"Use /{BotCommands.UnzipMirrorCommand} to extracts Google Drive archive folder/file\n\n"
+        gmsg += f"Use /{BotCommands.LeechCommand} to upload on telegram"
         return sendMessage(gmsg, bot, message)
+    tfile = link == 'telegram_file' or "https://api.telegram.org/file/" in link
     if config_dict['ENABLE_DM'] and message.chat.type != 'private':
         if isLeech and IS_USER_SESSION and not config_dict['DUMP_CHAT']:
-            delete_links(bot, message)
             return sendMessage('ENABLE_DM and User Session need DUMP_CHAT', bot, message)
-        tfile = link == 'telegram_file' or "https://api.telegram.org/file/" in link
-        dmMessage = sendDmMessage(link, bot, message, True, tfile)
+        dmMessage = sendDmMessage(link, bot, message, tfile)
         if not dmMessage:
             return
     else:
         dmMessage = None
-    listener = MirrorLeechListener(bot, message, isZip, extract, isQbit, isLeech, pswd, tag, select, seed, raw_url, c_index, dmMessage)
+    logMessage = None if isLeech else sendLogMessage(link, bot, message, tfile)
+    listener = MirrorLeechListener(bot, message, isZip, extract, isQbit, isLeech, pswd, tag, select, seed, raw_url, c_index, dmMessage, logMessage)
     listener.mode = 'Leech' if isLeech else f'Drive {CATEGORY_NAMES[c_index]}'
     if isZip:
         listener.mode += ' as Zip'
@@ -278,7 +290,6 @@ def start_mirror_leech(extra, s_listener):
         listener.mode += ' as Unzip'
     if link == 'telegram_file':
         Thread(target=TelegramDownloadHelper(listener).add_download, args=(message, f'{DOWNLOAD_DIR}{listener.uid}/', name)).start()
-        delete_links(bot, message)
         return
     LOGGER.info(link)
     if not is_mega_link(link) and not isQbit and not is_magnet(link) \
@@ -339,7 +350,6 @@ def start_mirror_leech(extra, s_listener):
         else:
             auth = ''
         Thread(target=add_aria2c_download, args=(link, f'{DOWNLOAD_DIR}{listener.uid}', listener, name, auth, ratio, seed_time)).start()
-    delete_links(bot, message)
 
 @new_thread
 def mir_confirm(update, context):
@@ -349,10 +359,9 @@ def mir_confirm(update, context):
     data = query.data
     data = data.split()
     msg_id = int(data[2])
-    try:
-        listnerInfo = btn_listener[msg_id]
-    except KeyError:
+    if msg_id not in btn_listener:
         return editMessage('<b>Download has been cancelled or started already</b>', message)
+    listnerInfo = btn_listener[msg_id]
     listener = listnerInfo[0]
     extra = listnerInfo[1]
     if user_id != listener[1].from_user.id and not CustomFilters.owner_query(user_id):
@@ -369,8 +378,8 @@ def mir_confirm(update, context):
         return editMessage('<b>Download has been cancelled</b>', message)
     elif data[1] == 'start':
         query.answer()
-        message.delete()
         del btn_listener[msg_id]
+        message.delete()
         return start_mirror_leech(extra, listener)
     time_out = listnerInfo[2] - (time() - extra[5])
     text, btns = get_category_btns('mir', time_out, msg_id, extra[4])
@@ -416,31 +425,31 @@ def qb_zip_leech(update, context):
     _mirror_leech(context.bot, update.message, True, isQbit=True, isLeech=True)
 
 mirror_handler = CommandHandler(BotCommands.MirrorCommand, mirror,
-                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 unzip_mirror_handler = CommandHandler(BotCommands.UnzipMirrorCommand, unzip_mirror,
-                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 zip_mirror_handler = CommandHandler(BotCommands.ZipMirrorCommand, zip_mirror,
-                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 qb_mirror_handler = CommandHandler(BotCommands.QbMirrorCommand, qb_mirror,
-                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 qb_unzip_mirror_handler = CommandHandler(BotCommands.QbUnzipMirrorCommand, qb_unzip_mirror,
-                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 qb_zip_mirror_handler = CommandHandler(BotCommands.QbZipMirrorCommand, qb_zip_mirror,
-                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 leech_handler = CommandHandler(BotCommands.LeechCommand, leech,
-                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 unzip_leech_handler = CommandHandler(BotCommands.UnzipLeechCommand, unzip_leech,
-                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 zip_leech_handler = CommandHandler(BotCommands.ZipLeechCommand, zip_leech,
-                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 qb_leech_handler = CommandHandler(BotCommands.QbLeechCommand, qb_leech,
-                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 qb_unzip_leech_handler = CommandHandler(BotCommands.QbUnzipLeechCommand, qb_unzip_leech,
-                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 qb_zip_leech_handler = CommandHandler(BotCommands.QbZipLeechCommand, qb_zip_leech,
-                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
+                                filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
 
-mir_handler = CallbackQueryHandler(mir_confirm, pattern="mir", run_async=True)
+mir_handler = CallbackQueryHandler(mir_confirm, pattern="mir")
 
 dispatcher.add_handler(mirror_handler)
 dispatcher.add_handler(unzip_mirror_handler)

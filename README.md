@@ -96,31 +96,36 @@ In each single file there is a major change from base code, it's almost totaly d
 - Extract these filetypes
   > ZIP, RAR, TAR, 7z, ISO, WIM, CAB, GZIP, BZIP2, APM, ARJ, CHM, CPIO, CramFS, DEB, DMG, FAT, HFS, LZH, LZMA, LZMA2, MBR, MSI, MSLZ, NSIS, NTFS, RPM, SquashFS, UDF, VHD, XAR, Z, TAR.XZ
 - Direct links Supported:
-  >mediafire, letsupload.io, hxfile.co, anonfiles.com, bayfiles.com, antfiles, fembed.com, fembed.net, femax20.com, layarkacaxxi.icu, fcdn.stream, sbplay.org, naniplay.com, naniplay.nanime.in, naniplay.nanime.biz, sbembed.com, streamtape.com, streamsb.net, feurl.com, upload.ee, pixeldrain.com, racaty.net, 1fichier.com, 1drv.ms (Only works for file not folder or business account), uptobox.com and solidfiles.com, mdisk.me (using ytdl command), terabox.com (you need to add cookies txt with name) [terabox.txt](https://chrome.google.com/webstore/detail/get-cookiestxt/bgaddhkoddajcdgocldbbfleckgcbcid)
+  > mediafire, letsupload.io, hxfile.co, anonfiles.com, bayfiles.com, antfiles, fembed.com, fembed.net, femax20.com, layarkacaxxi.icu, fcdn.stream, sbplay.org, naniplay.com, naniplay.nanime.in, naniplay.nanime.biz, sbembed.com, streamtape.com, streamsb.net, feurl.com, upload.ee, pixeldrain.com, racaty.net, 1fichier.com, 1drv.ms (Only works for file not folder or business account), uptobox.com and solidfiles.com, mdisk.me (using ytdl command), terabox.com (you need to add cookies txt with name) [terabox.txt](https://chrome.google.com/webstore/detail/get-cookiestxt/bgaddhkoddajcdgocldbbfleckgcbcid)
 
 ## By [Junedkh](https://github.com/junedkh)
 ### Repo is design for big groups
-In each single file there is a major change inspire from base code by my friend [Anasty17](https://github.com/anasty17/mirror-leech-telegram-bot) ❤️, it's almost not totaly different but. Here some of features which i hide it in .so files.
+In each single file there is a major change inspire from base code by my friend [Anasty17](https://github.com/anasty17/mirror-leech-telegram-bot) ❤️.
 
 ### Limits
 - Storage threshold limit 
-- leech limit
+- Leech limit
 - Clone limit
 - Mega limits
 - Torrent limits
 - Direct download limits
 - YTDLP limits
 - Google drive limits
-
+- User task limits
 
 ### Group Features
 - Force subscribe module
 - Chat restrictions
 - Message filters
-- Bot DM (Beta)
+- Bot DM support
+- Stop duplicate tasks
+- Enable/Disable drive links
+- Enable/Disable leech function
+- Mirror/Clone log chat
+
 
 ### Extra
-- Category wise drive uploads - more info can be found [here](https://github.com/junedkh/jmdkh-mltb#multi-category-ids)  
+- Category wise drive uploads - [Click Here](https://github.com/junedkh/jmdkh-mltb#multi-category-ids) for more info.
 
 # How to deploy?
 
@@ -186,7 +191,7 @@ Fill up rest of the fields. Meaning of each field is discussed below. **NOTE**: 
 - `INDEX_URL`: Refer to https://gitlab.com/ParveenBhadooOfficial/Google-Drive-Index. `Str`
 - `STATUS_LIMIT`: Limit the no. of tasks shown in status message with buttons. **NOTE**: Recommended limit is `4` tasks. `Str`
 - `STOP_DUPLICATE`: Bot will check file in Drive, if it is present in Drive, downloading or cloning will be stopped. (**NOTE**: File will be checked using filename not file hash, so this feature is not perfect yet). Default is `False`. `Bool`
-- `CMD_PERFIX`: commands index number. This number will added at the end all commands. `Str`
+- `CMD_SUFFIX`: commands index number. This number will added at the end all commands. `Str`
 - `TORRENT_TIMEOUT`: Timeout of dead torrents downloading with qBittorrent and Aria2c in seconds. `Str`
 - `EXTENSION_FILTER`: File extensions that won't upload/clone. Separate them by space. `Str`
 - `INCOMPLETE_TASK_NOTIFIER`: Get incomplete task messages after restart. Require database and superGroup. Default is `False`. `Bool`
@@ -203,7 +208,7 @@ Fill up rest of the fields. Meaning of each field is discussed below. **NOTE**: 
 - `AS_DOCUMENT`: Default type of Telegram file upload. Default is `False` mean as media. `Bool`
 - `EQUAL_SPLITS`: Split files larger than **LEECH_SPLIT_SIZE** into equal parts size (Not working with zip cmd). Default is `False`. `Bool`
 - `DUMP_CHAT`: Chat ID. Upload files to specific chat. `Str`. **NOTE**: Only available for superGroup/channel. Add `-100` before channel/superGroup id. In short don't add bot id or your id!
-- `USER_SESSION_STRING`: To download/upload from your telegram account. If you own premium account. To generate session string use this command `python3 generate_string_session.py` after mounting repo folder for sure. `Str`. **NOTE**: You can't use bot with private message. Use it with superGroup.
+- `USER_SESSION_STRING`: To download/upload from your telegram account. If you own premium account. To generate session string use this command `python3 generate_string_session.py` after mounting repo folder for sure. `Str`. **NOTE**: You can't use bot in private chat. Use it with superGroup.
 
 ### qBittorrent/Aria2c
 - `BASE_URL`: Valid BASE URL where the bot is deployed to use qbittorrent web selection. Format of URL should be `http://myip`, where `myip` is the IP/Domain(public) of your bot or if you have chosen port other than `80` so write it in this format `http://myip:port` (`http` and not `https`). `Str`
@@ -236,32 +241,34 @@ Fill up rest of the fields. Meaning of each field is discussed below. **NOTE**: 
 ### Limits
 - `STORAGE_THRESHOLD`: To leave specific storage free and any download will lead to leave free storage less than this value will be cancelled. Don't add unit, the default unit is `GB`.
 - `LEECH_LIMIT`:  To limit the Torrent/Direct/ytdlp leech size. Don't add unit, the default unit is `GB`.
-- `MAX_PLAYLIST`: To limit the ytdlp playlist in leech mode. `Str`
+- `MAX_PLAYLIST`: To limit number of files for ytdlp playlist in leech mode. `Int`
 - `CLONE_LIMIT`: To limit the size of Google Drive folder/file which you can clone. Don't add unit, the default unit is `GB`.
 - `MEGA_LIMIT`: To limit the size of Mega download. Don't add unit, the default unit is `GB`.
 - `TORRENT_LIMIT`: To limit the size of torrent download. Don't add unit, the default unit is `GB`.
 - `DIRECT_LIMIT`: To limit the size of direct link download. Don't add unit, the default unit is `GB`.
 - `YTDLP_LIMIT`: To limit the size of ytdlp download. Don't add unit, the default unit is `GB`.
-- `GDRIVE_LIMIT`: To limit the size of Google Drive folder/file which you can use for leech etc. Don't add unit, the default unit is `GB`.
+- `GDRIVE_LIMIT`: To limit the size of Google Drive folder/file link for leech, Zip, Unzip. Don't add unit, the default unit is `GB`.
 
 ### Group Features
-- `FSUB_IDS`: Fill chat_id of groups/channel you want to force subscribe. Separate them by space. `Str`
+- `FSUB_IDS`: Fill chat_id of groups/channel you want to force subscribe. Separate them by space. `Int`
   - it will apply only for member
-- `USER_MAX_TASKS`: Maximum number of tasks for each user apply only for member
-- `ENABLE_CHAT_RESTRICT`: To enable restriction when start download
-  - it will restrict until 1 minute apply only for member
-- `ENABLE_MESSAGE_FILTER`: To enable not allow download for message with captions or forwarded (inshort no promotion)
-  - it will apply only for member
-- `STOP_DUPLICATE_TASKS`: To enable stop duplicate task across multiple bots
-  - **Note**: all bot have added same database link.
-- `DISABLE_DRIVE_LINK`: To disable google drive link button in case you need it.
+  - **Note**: Bot should be added in the filled chat_id as admin.
+- `USER_MAX_TASKS`: Maximum number of tasks for each group members at a time. `Int` 
+- `ENABLE_CHAT_RESTRICT`: To enable restriction when download started. `Bool`
+  - it will restrict the user for 1 minute.
+- `ENABLE_MESSAGE_FILTER`: If enabled then bot will not download files with captions or forwarded. `Bool`
+- `STOP_DUPLICATE_TASKS`: To enable stop duplicate task across multiple bots. `Bool`
+  - **Note**: All bot must have added same database link.
+- `DISABLE_DRIVE_LINK`: To disable google drive link button in case you need it. `Bool`
 
 ### Extra Features
 - `SET_COMMANDS`: To set bot commands automatically on every startup. Default is `False`. `Bool`
-  - **Note**: or you can set it manually according to your needs few commands are available [here](#bot-commands-to-be-set-in-botfatherhttpstmebotfather)
+  - **Note**: You can set commands manually according to your needs few commands are available [here](#bot-commands-to-be-set-in-botfatherhttpstmebotfather)
 - `DISABLE_LEECH`: It will disable leech functionality. Default is `False`. `Bool`
-- `ENABLE_DM`: It will enable dm functionality for sending Mirrored/Leeched files. Default is `False`. `Bool`
+- `ENABLE_DM`: If enabled then bot will send Mirrored/Leeched files in user's DM. Default is `False`. `Bool`
 - `DELETE_LINKS`: It will delete links on download start. Default is `False`. `Bool`
+- `LOG_CHAT`: Fill chat_id of the group/channel. It will send mirror/clone links in the log chat. `Int`
+  - **Note**: Bot should be added in the log chat as admin.
 
 ------
 
@@ -493,6 +500,9 @@ TD2 0AO1JDB1t3i5jUk9PVA https://example.dev
 ```
 -----
 ## Multi Category IDs
+
+![image](https://graph.org/file/d8ed66fcb30116010b252.jpg)
+
 To use upload in categorywise TD/folder. Run driveid.py in your terminal and follow it. It will generate **drive_folder** file than rename it to `categories.txt` or u can simply create
 `categories.txt` file in working directory and fill it, check below format:
 ```
@@ -501,11 +511,11 @@ categoryName folderID/tdID IndexLink(if available)
 ```
 Example:
 ```
-Team_Drive 0AO1JDB1t3i5jUk9PVA https://example.dev/0:
+Root 0AO1JDB1t3i5jUk9PVA https://example.dev/0:
 Movies 1H4w824ZhOt4rs14XPajDja0dAdFp1glI https://example.dev/0:/movies
 Series 1H4w434ZhOt4rs14XPajDja0dAdFp1glI https://example.dev/0:/series
 ```
-Now when /dl cmd is used to mirror files, you will see category option. Using that u can upload files categorywise in TD/Folder.
+Now when you use /mirror or /clone cmd, you will see category options. Using that u can upload files categorywise in TD/Folder.
 
 ## Multi Shortener
 To use multiple shorteners to maintain CPM! it will use random shorteners to generate short links.

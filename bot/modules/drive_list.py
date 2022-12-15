@@ -9,9 +9,9 @@ from bot.helper.mirror_utils.upload_utils.gdriveTools import GoogleDriveHelper
 from bot.helper.telegram_helper.bot_commands import BotCommands
 from bot.helper.telegram_helper.button_build import ButtonMaker
 from bot.helper.telegram_helper.filters import CustomFilters
-from bot.helper.telegram_helper.message_utils import (deleteMessage,
-                                                      editMessage, sendMarkup,
-                                                      sendMessage)
+from bot.helper.telegram_helper.message_utils import (anno_checker,
+                                                      deleteMessage,
+                                                      editMessage, sendMessage)
 
 list_listener = {}
 
@@ -25,15 +25,20 @@ def common_btn(isRecur, msg_id):
     return buttons.build_menu(3)
 
 def list_buttons(update, context):
-    user_id = update.message.from_user.id
-    msg_id = update.message.message_id
+    message = update.message
+    if message.from_user.id in [1087968824, 136817688]:
+        message.from_user.id = anno_checker(message)
+        if not message.from_user.id:
+            return
+    user_id = message.from_user.id
+    msg_id = message.message_id
     if len(context.args) == 0:
-        return sendMessage('Send a search key along with command', context.bot, update.message)
+        return sendMessage('Send a search key along with command', context.bot, message)
     isRecur = False
     button = common_btn(isRecur, msg_id)
-    query = update.message.text.split(" ", maxsplit=1)[1]
+    query = message.text.split(" ", maxsplit=1)[1]
     list_listener[msg_id] = [user_id, query, isRecur]
-    sendMarkup('Choose option to list.', context.bot, update.message, button)
+    sendMessage('Choose option to list.', context.bot, message, button)
 
 def select_type(update, context):
     query = update.callback_query
@@ -76,13 +81,13 @@ def _list_drive(listener, bmsg, item_type, bot):
     deleteMessage(bot, bmsg)
     if button:
         msg = f'{msg}\n\n<b>Type</b>: {item_type} | <b>Recursive list</b>: {isRecur}\n#list: {tag}\n<b>Elapsed</b>: {Elapsed}'
-        sendMarkup(msg, bot, bmsg.reply_to_message, button)
+        sendMessage(msg, bot, bmsg.reply_to_message, button)
     else:
         sendMessage(f'No result found for <i>{query}</i>\n\n<b>Type</b>: {item_type} | <b>Recursive list</b>: {isRecur}\n#list: {tag}\n<b>Elapsed</b>: {Elapsed}', bot, bmsg.reply_to_message)
 
 list_handler = CommandHandler(BotCommands.ListCommand, list_buttons,
-                              filters=CustomFilters.authorized_chat | CustomFilters.authorized_user, run_async=True)
-list_type_handler = CallbackQueryHandler(select_type, pattern="types", run_async=True)
+                              filters=CustomFilters.authorized_chat | CustomFilters.authorized_user)
+list_type_handler = CallbackQueryHandler(select_type, pattern="types")
 
 dispatcher.add_handler(list_handler)
 dispatcher.add_handler(list_type_handler)

@@ -53,8 +53,6 @@ def _rmdb(message, bot):
             DbManger().remove_download(exist['_id'])
             msg = 'Download is removed from database successfully'
             msg += f'\n{exist["tag"]} Your download is removed.'
-            if tag:
-                msg += f'\n{tag} Now you can download this link'
         else:
             msg = 'This download is not exists in database'
     else:
@@ -66,5 +64,5 @@ def rmdbNode(update, context):
     _rmdb(update.message, context.bot)
 
 if DATABASE_URL:
-    rmdb_handler = CommandHandler(command=BotCommands.RmdbCommand, callback=rmdbNode, filters=CustomFilters.owner_filter | CustomFilters.sudo_user, run_async=True)
+    rmdb_handler = CommandHandler(command=BotCommands.RmdbCommand, callback=rmdbNode, filters=CustomFilters.owner_filter | CustomFilters.sudo_user)
     dispatcher.add_handler(rmdb_handler)
