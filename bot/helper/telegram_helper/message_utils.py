@@ -146,21 +146,13 @@ def sendStatusMessage(msg, bot):
         if not Interval:
             Interval.append(setInterval(config_dict['DOWNLOAD_STATUS_UPDATE_INTERVAL'], update_all_messages))
 
-def sendDmMessage(text, bot, message, forward=False):
+def sendDmMessage(text, bot, message):
     try:
-        if forward:
-            return bot.forward_message(message.from_user.id,
-                            from_chat_id=message.chat_id,
-                            message_id=message.reply_to_message.message_id,
-                            disable_notification=False)
-        return bot.sendMessage(message.from_user.id,
-                            reply_to_message_id=message.message_id,
-                            disable_notification=False,
-                            text=text)
+        return bot.sendMessage(message.from_user.id, disable_notification=False, text=message.link)
     except RetryAfter as r:
         LOGGER.warning(str(r))
         sleep(r.retry_after * 1.5)
-        return sendDmMessage(text, bot, message, forward)
+        return sendDmMessage(text, bot, message)
     except Unauthorized:
         buttons = ButtonMaker()
         buttons.buildbutton("Start", f"{bot.link}?start=start")
@@ -170,29 +162,25 @@ def sendDmMessage(text, bot, message, forward=False):
         LOGGER.error(str(e))
         return
 
-def sendLogMessage(text, bot, message, forward=False):
+def sendLogMessage(text, bot, message):
     if not (log_chat := config_dict['LOG_CHAT']):
         return
     try:
-        if forward:
-            return bot.forward_message(log_chat,
-                            from_chat_id=message.chat_id,
-                            message_id=message.reply_to_message.message_id,
-                            disable_notification=False)
-        return bot.sendMessage(log_chat,
-                            disable_notification=False,
-                            text=text)
+        return bot.sendMessage(log_chat, disable_notification=False, text=message.link)
     except RetryAfter as r:
         LOGGER.warning(str(r))
         sleep(r.retry_after * 1.5)
-        return sendLogMessage(text, bot, message, forward)
+        return sendLogMessage(text, bot, message)
     except Exception as e:
         LOGGER.error(str(e))
         return
 
-def isAdmin(message):
+def isAdmin(message, user_id=None):
     if message.chat.type != message.chat.PRIVATE:
-        member = message.chat.get_member(message.from_user.id)
+        if user_id:
+            member = message.chat.get_member(user_id)
+        else:
+            member = message.chat.get_member(message.from_user.id)
         return member.status in [member.ADMINISTRATOR, member.CREATOR] or member.is_anonymous
 
 def forcesub(bot, message, tag):
@@ -244,14 +232,15 @@ def delete_links(bot, message):
 
 def anno_checker(message):
     user_id = message.from_user.id
+    msg_id = message.message_id
+    buttons = ButtonMaker()
     if user_id == 1087968824:
         _msg = "Group Anonymous Admin"
+        buttons.sbutton('Verify Anonymous', f'verify admin {msg_id}')
     elif user_id == 136817688:
         _msg = "Channel"
-    msg_id = message.message_id
+        buttons.sbutton('Verify Channel', f'verify channel {msg_id}')
     btn_listener[msg_id] = [True, None]
-    buttons = ButtonMaker()
-    buttons.sbutton('Verify', f'verify yes {msg_id}')
     buttons.sbutton('Cancel', f'verify no {msg_id}')
     sendMessage(f'{_msg} Verification\nIf you hit Verify! Your username and id will expose in bot logs!', message.bot, message, buttons.build_menu(2))
     user_id = None
