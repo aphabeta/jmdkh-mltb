@@ -1,4 +1,3 @@
-from json import loads as jsonloads
 from math import ceil
 from os import listdir, makedirs, mkdir
 from os import path as ospath
@@ -152,14 +151,13 @@ def split_file(path, size, file_, dirpath, split_size, listener, start_time=0, i
         while i <= parts:
             parted_name = f"{str(base_name)}.part{str(i).zfill(3)}{str(extension)}"
             out_path = ospath.join(dirpath, parted_name)
+            cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", str(start_time),
+                    "-i", path, "-fs", str(split_size), "-map_chapters", "-1",
+                    "-c", "copy", out_path]
             if not noMap:
-                listener.suproc = Popen(["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", str(start_time),
-                                         "-i", path, "-fs", str(split_size), "-map", "0", "-map_chapters", "-1",
-                                         "-c", "copy", out_path])
-            else:
-                listener.suproc = Popen(["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", str(start_time),
-                                          "-i", path, "-fs", str(split_size), "-map_chapters", "-1", "-c", "copy",
-                                          out_path])
+                cmd.insert(10, '-map')
+                cmd.insert(11, '0')
+            listener.suproc = Popen(cmd)
             listener.suproc.wait()
             if listener.suproc.returncode == -9:
                 return False
@@ -221,7 +219,7 @@ def get_media_info(path):
         LOGGER.error(f'{e}. Mostly file not found!')
         return 0, None, None
 
-    fields = jsonloads(result).get('format')
+    fields = eval(result).get('format')
     if fields is None:
         LOGGER.error(f"get_media_info: {result}")
         return 0, None, None
@@ -262,7 +260,7 @@ def get_media_streams(path):
         LOGGER.error(f'{e}. Mostly file not found!')
         return is_video, is_audio
 
-    fields = jsonloads(result).get('streams')
+    fields = eval(result).get('streams')
     if fields is None:
         LOGGER.error(f"get_media_streams: {result}")
         return is_video, is_audio
@@ -275,17 +273,16 @@ def get_media_streams(path):
 
     return is_video, is_audio
 
-def check_storage_threshold(size: int, arch=False, alloc=False):
-    STORAGE_THRESHOLD = config_dict['STORAGE_THRESHOLD']
+def check_storage_threshold(size, threshold, arch=False, alloc=False):
     if not alloc:
         if not arch:
-            if disk_usage(DOWNLOAD_DIR).free - size < STORAGE_THRESHOLD * 1024**3:
+            if disk_usage(DOWNLOAD_DIR).free - size < threshold:
                 return False
-        elif disk_usage(DOWNLOAD_DIR).free - (size * 2) < STORAGE_THRESHOLD * 1024**3:
+        elif disk_usage(DOWNLOAD_DIR).free - (size * 2) < threshold:
             return False
     elif not arch:
-        if disk_usage(DOWNLOAD_DIR).free < STORAGE_THRESHOLD * 1024**3:
+        if disk_usage(DOWNLOAD_DIR).free < threshold:
             return False
-    elif disk_usage(DOWNLOAD_DIR).free - size < STORAGE_THRESHOLD * 1024**3:
+    elif disk_usage(DOWNLOAD_DIR).free - size < threshold:
         return False
     return True
