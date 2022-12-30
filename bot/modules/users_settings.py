@@ -1,5 +1,6 @@
 from functools import partial
 from html import escape
+from math import ceil
 from os import mkdir, path, remove
 from time import sleep, time
 
@@ -9,7 +10,8 @@ from telegram.ext import (CallbackQueryHandler, CommandHandler, Filters,
 
 from bot import (DATABASE_URL, IS_PREMIUM_USER, MAX_SPLIT_SIZE, config_dict,
                  dispatcher, user_data)
-from bot.helper.ext_utils.bot_utils import update_user_ldata
+from bot.helper.ext_utils.bot_utils import (get_readable_file_size,
+                                            update_user_ldata)
 from bot.helper.ext_utils.db_handler import DbManger
 from bot.helper.telegram_helper.bot_commands import BotCommands
 from bot.helper.telegram_helper.button_build import ButtonMaker
@@ -42,6 +44,11 @@ def get_user_settings(from_user):
     else:
         equal_splits = 'Disabled'
 
+    if not user_dict and config_dict['MEDIA_GROUP'] or user_dict and user_dict.get('media_group'):
+        media_group = 'Enabled'
+    else:
+        media_group = 'Disabled'
+
     buttons.sbutton("YT-DLP Quality", f"userset {user_id} ytq")
     if user_dict and user_dict.get('yt_ql'):
         ytq = user_dict['yt_ql']
@@ -61,9 +68,10 @@ def get_user_settings(from_user):
     text = f"<u>Settings for <a href='tg://user?id={user_id}'>{name}</a></u>\n"\
             f"Leech Type is <b>{ltype}</b>\n"\
             f"Custom Thumbnail <b>{thumbmsg}</b>\n"\
-            f"Leech Split Size is <b>{split_size}</b>\n"\
+            f"Leech Split Size is <b>{get_readable_file_size(split_size)}</b>\n"\
             f"Equal Splits is <b>{equal_splits}</b>\n"\
             f"YT-DLP Quality is <b><code>{escape(ytq)}</code></b>\n" \
+            f"Media Group is <b>{media_group}</b>\n"\
             f"Leech Prefix is <code>{escape(lprefix)}</code>"
     return text, buttons.build_menu(1)
 
@@ -118,7 +126,7 @@ def leech_split_size(update, context, omsg):
     message = update.message
     user_id = message.from_user.id
     handler_dict[user_id] = False
-    value = min(int(message.text), MAX_SPLIT_SIZE)
+    value = min(ceil(float(message.text) * 1024 ** 3), MAX_SPLIT_SIZE)
     update_user_ldata(user_id, 'split_size', value)
     update.message.delete()
     update_user_settings(omsg, message.from_user)
@@ -278,9 +286,15 @@ Check all available formatting options <a href="https://core.telegram.org/bots/a
             buttons.sbutton("Disable Equal Splits", f"userset {user_id} esplits")
         else:
             buttons.sbutton("Enable Equal Splits", f"userset {user_id} esplits")
+        if not user_dict and config_dict['MEDIA_GROUP'] or user_dict and user_dict.get('media_group'):
+            buttons.sbutton("Disable Media Group", f"userset {user_id} mgroup")
+        else:
+            buttons.sbutton("Enable Media Group", f"userset {user_id} mgroup")
         buttons.sbutton("Back", f"userset {user_id} back")
         buttons.sbutton("Close", f"userset {user_id} close")
-        editMessage(f'Send Leech split size in bytes. IS_PREMIUM_USER: {IS_PREMIUM_USER}. Timeout: 60 sec', message, buttons.build_menu(1))
+        __msg = "Send Leech split size don't add unit, the default unit is <b>GB</b>\n"
+        __msg += f"\nExamples:\n1 for 1GB\n0.5 for 512mb\n\nIS_PREMIUM_USER: {IS_PREMIUM_USER}. Timeout: 60 sec"
+        editMessage(__msg, message, buttons.build_menu(1))
         partial_fnc = partial(leech_split_size, omsg=message)
         size_handler = MessageHandler(filters=Filters.text & Filters.chat(message.chat.id) & Filters.user(user_id),
                                       callback=partial_fnc)
@@ -302,6 +316,13 @@ Check all available formatting options <a href="https://core.telegram.org/bots/a
         query.answer()
         handler_dict[user_id] = False
         update_user_ldata(user_id, 'equal_splits', not bool(user_dict and user_dict.get('equal_splits')))
+        update_user_settings(message, query.from_user)
+        if DATABASE_URL:
+            DbManger().update_user_data(user_id)
+    elif data[2] == 'mgroup':
+        query.answer()
+        handler_dict[user_id] = False
+        update_user_ldata(user_id, 'media_group', not bool(user_dict and user_dict.get('media_group')))
         update_user_settings(message, query.from_user)
         if DATABASE_URL:
             DbManger().update_user_data(user_id)
